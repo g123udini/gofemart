@@ -7,14 +7,14 @@ import (
 )
 
 type flags struct {
-	RunAddr string `env:"ADDRESS"`
-	Dsn     string `env:"DATABASE_DSN"`
+	RunAddr string `.env:"ADDRESS"`
+	Dsn     string `.env:"DATABASE_DSN"`
 }
 
 func parseFlags() *flags {
 	f := flags{
 		RunAddr: ":8080",
-		Dsn:     "",
+		Dsn:     "postgres://dev:dev@localhost:5432/dev",
 	}
 
 	flag.StringVar(&f.RunAddr, "a", f.RunAddr, "address and port to run server")

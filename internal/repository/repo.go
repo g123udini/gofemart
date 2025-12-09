@@ -2,18 +2,29 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
+	"github.com/g123udini/gofemart/internal/model"
+	"github.com/g123udini/gofemart/internal/service"
+	"github.com/jackc/pgx/v5/pgconn"
 	"log"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
+)
+
+var (
+	ErrUserAlreadyExists = errors.New("login already exists")
 )
 
 type Repo struct {
-	db *sql.DB
+	Db *sql.DB
+	mu sync.RWMutex
 }
 
-func NewRepository(DSN string) *Repo {
+func NewRepository(DSN string) (*Repo, error) {
 	if !isValidDSN(DSN) {
-		return nil
+		return nil, errors.New("invalid DSN")
 	}
 	db, err := sql.Open("pgx", DSN)
 
@@ -21,7 +32,29 @@ func NewRepository(DSN string) *Repo {
 		log.Fatal(err)
 	}
 
-	return &Repo{db: db}
+	return &Repo{Db: db}, nil
+}
+
+func (repo *Repo) SaveUser(user model.User) error {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	_, err := service.RetryDB(3, 1*time.Second, 2*time.Second, func() (sql.Result, error) {
+		return repo.Db.Exec("INSERT INTO users (login, password) VALUES ($1, $2)", user.Login, user.Password)
+	})
+
+	var pgErr *pgconn.PgError
+	if err != nil && errors.As(err, &pgErr) {
+		if pgErr.Code == "23505" {
+			return ErrUserAlreadyExists
+		}
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func isValidDSN(dsn string) bool {

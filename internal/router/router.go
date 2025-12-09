@@ -11,8 +11,8 @@ func NewRouter(handler *handler.Handler) chi.Router {
 	r.Use(middleware.Logger)
 	r.Use(middleware.AllowContentType("application/json"))
 
-	r.Route("/", func(r chi.Router) {
-		r.Get("/", handler.Test)
+	r.Route("/api", func(r chi.Router) {
+		r.Get("/user/register", handler.Register)
 	})
 
 	return r
