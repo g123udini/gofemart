@@ -15,6 +15,7 @@ import (
 
 var (
 	ErrUserAlreadyExists = errors.New("login already exists")
+	ErrNotFoundUser      = errors.New("user not found")
 )
 
 type Repo struct {
@@ -33,6 +34,27 @@ func NewRepository(DSN string) (*Repo, error) {
 	}
 
 	return &Repo{Db: db}, nil
+}
+
+func (repo *Repo) GetUserByLogin(login string) (model.User, error) {
+	repo.mu.RLock()
+	repo.mu.RUnlock()
+
+	u := model.User{}
+
+	_, err := service.RetryDB(3, 1*time.Second, 2*time.Second, func() (sql.Result, error) {
+		return nil, repo.Db.QueryRow("SELECT login, password FROM users WHERE login = $1", login).Scan(&u.Login, &u.Password)
+	})
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.User{}, ErrNotFoundUser
+	}
+
+	if err != nil {
+		return u, err
+	}
+
+	return u, nil
 }
 
 func (repo *Repo) SaveUser(user model.User) error {

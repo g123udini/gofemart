@@ -7,6 +7,7 @@ import (
 	"github.com/g123udini/gofemart/internal/handler"
 	"github.com/g123udini/gofemart/internal/repository"
 	"github.com/g123udini/gofemart/internal/router"
+	"github.com/g123udini/gofemart/internal/service"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -18,6 +19,7 @@ import (
 
 func main() {
 	f := parseFlags()
+	ms := service.NewMemStorage()
 	repo, err := repository.NewRepository(f.Dsn)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -25,19 +27,19 @@ func main() {
 
 	//initMigrations(repo.Db)
 
-	err = run(repo, f)
+	err = run(repo, ms, f)
 
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 }
 
-func run(repo *repository.Repo, f *flags) error {
+func run(repo *repository.Repo, ms *service.MemStorage, f *flags) error {
 	fmt.Println("Running server on", f.RunAddr)
 
 	normalizeHost(f.RunAddr)
 
-	h := handler.NewHandler(repo)
+	h := handler.NewHandler(repo, ms)
 	r := router.NewRouter(h)
 
 	return http.ListenAndServe(f.RunAddr, r)
