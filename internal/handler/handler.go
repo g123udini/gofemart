@@ -24,7 +24,12 @@ func NewHandler(repository *repository.Repo, ms *service.MemStorage) *Handler {
 	}
 }
 
-func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+func (handler *Handler) Test(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Login    string `json:"login"`
 		Password string `json:"password"`
@@ -44,7 +49,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		Password: string(hash),
 	}
 
-	err := h.repo.SaveUser(u)
+	err := handler.repo.SaveUser(u)
 
 	if err != nil {
 		if errors.Is(err, repository.ErrUserAlreadyExists) {
@@ -60,7 +65,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Login    string `json:"login"`
 		Password string `json:"password"`
@@ -73,7 +78,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.repo.GetUserByLogin(input.Login)
+	u, err := handler.repo.GetUserByLogin(input.Login)
 	hash, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 
 	if err != nil {
@@ -87,7 +92,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID, err := NewSessionID()
-	h.ms.AddSession(sessionID, u.Login)
+	handler.ms.AddSession(sessionID, u.Login)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -114,21 +119,20 @@ func NewSessionID() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-//func (handler *Handler) SessionAuth(next http.Handler) http.Handler {
-//	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-//		c, err := r.Cookie("session_id")
-//		if err != nil {
-//			http.Error(w, "unauthorized", http.StatusUnauthorized)
-//			return
-//		}
-//
-//		// load user by session_id from storage
-//		//userID, err := storage.GetUserID(c.Value)
-//		if err != nil {
-//			http.Error(w, "unauthorized", http.StatusUnauthorized)
-//			return
-//		}
-//
-//		next.ServeHTTP(w, r)
-//	})
-//}
+func (handler *Handler) SessionAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := r.Cookie("session_id")
+		if err != nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		_, ok := handler.ms.GetSession(c.Value)
+		if ok != true {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}

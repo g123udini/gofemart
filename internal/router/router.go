@@ -26,5 +26,6 @@ func routeUser(router chi.Router, handler *handler.Handler) {
 	router.Route("/user", func(r chi.Router) {
 		r.Get("/register", handler.Register)
 		r.Get("/login", handler.Login)
+		r.With(handler.SessionAuth).Get("/test", handler.Test)
 	})
 }
