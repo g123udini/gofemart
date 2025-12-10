@@ -24,8 +24,8 @@ func routeAPI(router chi.Router, handler *handler.Handler) {
 
 func routeUser(router chi.Router, handler *handler.Handler) {
 	router.Route("/user", func(r chi.Router) {
-		r.Get("/register", handler.Register)
-		r.Get("/login", handler.Login)
+		r.Post("/register", handler.Register)
+		r.Post("/login", handler.Login)
 		r.With(handler.SessionAuth).Get("/test", handler.Test)
 	})
 }
