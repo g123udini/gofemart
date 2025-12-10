@@ -128,7 +128,7 @@ func (handler *Handler) SessionAuth(next http.Handler) http.Handler {
 		}
 
 		_, ok := handler.ms.GetSession(c.Value)
-		if ok != true {
+		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

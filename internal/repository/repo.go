@@ -19,7 +19,7 @@ var (
 )
 
 type Repo struct {
-	Db *sql.DB
+	DB *sql.DB
 	mu sync.RWMutex
 }
 
@@ -33,17 +33,17 @@ func NewRepository(DSN string) (*Repo, error) {
 		log.Fatal(err)
 	}
 
-	return &Repo{Db: db}, nil
+	return &Repo{DB: db}, nil
 }
 
 func (repo *Repo) GetUserByLogin(login string) (model.User, error) {
 	repo.mu.RLock()
-	repo.mu.RUnlock()
+	defer repo.mu.RUnlock()
 
 	u := model.User{}
 
 	_, err := service.RetryDB(3, 1*time.Second, 2*time.Second, func() (sql.Result, error) {
-		return nil, repo.Db.QueryRow("SELECT login, password FROM users WHERE login = $1", login).Scan(&u.Login, &u.Password)
+		return nil, repo.DB.QueryRow("SELECT login, password FROM users WHERE login = $1", login).Scan(&u.Login, &u.Password)
 	})
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -62,7 +62,7 @@ func (repo *Repo) SaveUser(user model.User) error {
 	defer repo.mu.Unlock()
 
 	_, err := service.RetryDB(3, 1*time.Second, 2*time.Second, func() (sql.Result, error) {
-		return repo.Db.Exec("INSERT INTO users (login, password) VALUES ($1, $2)", user.Login, user.Password)
+		return repo.DB.Exec("INSERT INTO users (login, password) VALUES ($1, $2)", user.Login, user.Password)
 	})
 
 	var pgErr *pgconn.PgError
