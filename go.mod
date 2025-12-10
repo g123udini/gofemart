@@ -1,6 +1,6 @@
 module github.com/g123udini/gofemart
 
-go 1.25.4
+go 1.24.0
 
 require (
 	github.com/caarlos0/env v3.5.0+incompatible
