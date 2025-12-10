@@ -11,12 +11,12 @@ func NewRouter(handler *handler.Handler) chi.Router {
 	r.Use(middleware.Logger)
 	r.Use(middleware.AllowContentType("application/json"))
 
-	routeApi(r, handler)
+	routeAPI(r, handler)
 
 	return r
 }
 
-func routeApi(router chi.Router, handler *handler.Handler) {
+func routeAPI(router chi.Router, handler *handler.Handler) {
 	router.Route("/api", func(r chi.Router) {
 		routeUser(r, handler)
 	})
