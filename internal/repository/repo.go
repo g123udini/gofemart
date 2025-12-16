@@ -80,6 +80,41 @@ func (repo *Repo) GetOrderByNumberUser(number string, user *model.User) (*model.
 	return &order, nil
 }
 
+func (repo *Repo) GetOrdersByUser(user *model.User) ([]model.Order, error) {
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
+
+	rows, err := repo.DB.Query(
+		`SELECT number, status, accural, uploaded_at, user_id
+		 FROM orders
+		 WHERE user_id = $1
+		 ORDER BY uploaded_at ASC`,
+		user.Id,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	orders := make([]model.Order, 0)
+
+	for rows.Next() {
+		var order model.Order
+
+		if err := rows.Scan(order.ScanFields()...); err != nil {
+			return nil, err
+		}
+
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return orders, nil
+}
+
 func (repo *Repo) getModel(
 	model model.Model,
 	sqlString string,

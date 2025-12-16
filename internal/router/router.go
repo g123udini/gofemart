@@ -31,5 +31,10 @@ func routeUser(router chi.Router, handler *handler.Handler) {
 			With(middleware.AllowContentType("text/plain")).
 			With(handler.SessionAuth).
 			Post("/orders", handler.AddOrder)
+
+		r.
+			With(middleware.AllowContentType("application/json")).
+			With(handler.SessionAuth).
+			Get("/orders", handler.GetOrder)
 	})
 }
