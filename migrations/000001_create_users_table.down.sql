@@ -1,3 +1,3 @@
-DROP INDEX IF EXISTS created_at_idx;
-DROP INDEX IF EXISTS email_ui;
+DROP INDEX IF EXISTS users_created_at_idx;
+DROP INDEX IF EXISTS users_login_ui;
 DROP TABLE IF EXISTS users;

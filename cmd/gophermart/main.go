@@ -34,7 +34,7 @@ func main() {
 	}
 }
 
-func run(repo *repository.Repo, ms *service.MemStorage, f *flags) error {
+func run(repo *repository.Repo, ms *service.MemSessionStorage, f *flags) error {
 	fmt.Println("Running server on", f.RunAddr)
 
 	normalizeHost(f.RunAddr)

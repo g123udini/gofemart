@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -9,15 +10,18 @@ import (
 	"github.com/g123udini/gofemart/internal/repository"
 	"github.com/g123udini/gofemart/internal/service"
 	"golang.org/x/crypto/bcrypt"
+	"io"
 	"net/http"
+	"strings"
+	"time"
 )
 
 type Handler struct {
 	repo *repository.Repo
-	ms   *service.MemStorage
+	ms   *service.MemSessionStorage
 }
 
-func NewHandler(repository *repository.Repo, ms *service.MemStorage) *Handler {
+func NewHandler(repository *repository.Repo, ms *service.MemSessionStorage) *Handler {
 	return &Handler{
 		repo: repository,
 		ms:   ms,
@@ -52,7 +56,7 @@ func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	err := handler.repo.SaveUser(u)
 
 	if err != nil {
-		if errors.Is(err, repository.ErrUserAlreadyExists) {
+		if errors.Is(err, repository.UniqConstraitErr) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
@@ -62,6 +66,68 @@ func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func (h *Handler) AddOrder(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "cannot read body", http.StatusBadRequest)
+		return
+	}
+	orderNumber := strings.TrimSpace(string(body))
+
+	if !service.ValidLun(orderNumber) {
+		http.Error(w, "order number not valid", http.StatusUnprocessableEntity)
+		return
+	}
+
+	cookie, err := r.Cookie("session_id")
+	if err != nil || cookie.Value == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	login, _ := h.ms.GetSession(cookie.Value)
+	user, err := h.repo.GetUserByLogin(login)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "user not found", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	existing, err := h.repo.GetOrderByNumberUser(orderNumber, user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if existing != nil {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("exists"))
+		return
+	}
+
+	order := &model.Order{
+		Number:     orderNumber,
+		Status:     "NEW",
+		Accrual:    0,
+		UploadedAt: time.Now(),
+		UserId:     user.Id,
+	}
+
+	if err = h.repo.SaveOrder(order); err != nil {
+		if errors.Is(err, repository.UniqConstraitErr) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 	w.Write([]byte("ok"))
 }
 
@@ -82,7 +148,7 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	hash, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFoundUser) || u.Password != string(hash) {
+		if errors.Is(err, repository.ErrNotFound) || u.Password != string(hash) {
 			http.Error(w, "Wrong pass or login", http.StatusUnauthorized)
 			return
 		}
