@@ -65,21 +65,7 @@ func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionID, err := NewSessionID()
-	handler.ms.AddSession(sessionID, u.Login)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    sessionID,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	handler.startSession(&u, w)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -111,6 +97,13 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	handler.startSession(u, w)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func (handler *Handler) startSession(u *model.User, w http.ResponseWriter) {
 	sessionID, err := NewSessionID()
 	handler.ms.AddSession(sessionID, u.Login)
 
@@ -126,9 +119,6 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
 }
 
 func (handler *Handler) GetOrder(w http.ResponseWriter, r *http.Request) {
