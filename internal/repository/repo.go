@@ -67,7 +67,7 @@ func (repo *Repo) GetOrderByNumberUser(number string, user *model.User) (*model.
 		 FROM orders
 		 WHERE number = $1 AND user_id = $2`,
 		number,
-		user.Id,
+		user.ID,
 	)
 
 	if err != nil {
@@ -89,7 +89,7 @@ func (repo *Repo) GetOrdersByUser(user *model.User) ([]model.Order, error) {
 		 FROM orders
 		 WHERE user_id = $1
 		 ORDER BY uploaded_at ASC`,
-		user.Id,
+		user.ID,
 	)
 	if err != nil {
 		return nil, err
