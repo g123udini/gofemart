@@ -37,12 +37,12 @@ func main() {
 func run(repo *repository.Repo, ms *service.MemSessionStorage, f *flags) error {
 	fmt.Println("Running server on", f.RunAddr)
 
-	//normalizeHost(f.RunAddr)
+	host := normalizeHost(f.RunAddr)
 
 	h := handler.NewHandler(repo, ms)
 	r := router.NewRouter(h)
 
-	return http.ListenAndServe(f.RunAddr, r)
+	return http.ListenAndServe(host, r)
 }
 
 func normalizeHost(host string) string {
