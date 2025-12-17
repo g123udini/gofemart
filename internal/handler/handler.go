@@ -65,6 +65,68 @@ func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sessionID, err := NewSessionID()
+	handler.ms.AddSession(sessionID, u.Login)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    sessionID,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Login    string `json:"login"`
+		Password string `json:"password"`
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(&input); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	u, err := handler.repo.GetUserByLogin(input.Login)
+	hash, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) || u.Password != string(hash) {
+			http.Error(w, "Wrong pass or login", http.StatusUnauthorized)
+			return
+		}
+
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sessionID, err := NewSessionID()
+	handler.ms.AddSession(sessionID, u.Login)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    sessionID,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
@@ -165,52 +227,6 @@ func (handler *Handler) AddOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusAccepted)
-	w.Write([]byte("ok"))
-}
-
-func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Login    string `json:"login"`
-		Password string `json:"password"`
-	}
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-
-	if err := dec.Decode(&input); err != nil {
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
-
-	u, err := handler.repo.GetUserByLogin(input.Login)
-	hash, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
-
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) || u.Password != string(hash) {
-			http.Error(w, "Wrong pass or login", http.StatusUnauthorized)
-			return
-		}
-
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	sessionID, err := NewSessionID()
-	handler.ms.AddSession(sessionID, u.Login)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    sessionID,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-
-	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
 
