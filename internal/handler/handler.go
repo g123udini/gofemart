@@ -56,7 +56,7 @@ func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	err := handler.repo.SaveUser(u)
 
 	if err != nil {
-		if errors.Is(err, repository.UniqConstraitErr) {
+		if errors.Is(err, repository.ErrUniqConstrait) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
@@ -156,7 +156,7 @@ func (handler *Handler) AddOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = handler.repo.SaveOrder(order); err != nil {
-		if errors.Is(err, repository.UniqConstraitErr) {
+		if errors.Is(err, repository.ErrUniqConstrait) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}

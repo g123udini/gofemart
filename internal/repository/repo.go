@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	UniqConstraitErr = errors.New("already exists")
+	ErrUniqConstrait = errors.New("already exists")
 	ErrNotFound      = errors.New("user not found")
 )
 
@@ -163,7 +163,7 @@ func (repo *Repo) SaveDB(sqlString string, args ...any) error {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return UniqConstraitErr
+			return ErrUniqConstrait
 		}
 		return err
 	}
