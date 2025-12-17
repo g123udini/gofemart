@@ -9,7 +9,6 @@ import (
 func NewRouter(handler *handler.Handler) chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
-	r.Use(middleware.AllowContentType("application/json"))
 
 	routeAPI(r, handler)
 
@@ -27,5 +26,15 @@ func routeUser(router chi.Router, handler *handler.Handler) {
 		r.Post("/register", handler.Register)
 		r.Post("/login", handler.Login)
 		r.With(handler.SessionAuth).Get("/test", handler.Test)
+
+		r.
+			With(middleware.AllowContentType("text/plain")).
+			With(handler.SessionAuth).
+			Post("/orders", handler.AddOrder)
+
+		r.
+			With(middleware.AllowContentType("application/json")).
+			With(handler.SessionAuth).
+			Get("/orders", handler.GetOrder)
 	})
 }

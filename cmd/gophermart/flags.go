@@ -7,8 +7,9 @@ import (
 )
 
 type flags struct {
-	RunAddr string `.env:"ADDRESS"`
-	Dsn     string `.env:"DATABASE_DSN"`
+	RunAddr       string `env:"RUN_ADDRESS"`
+	Dsn           string `env:"DATABASE_URI"`
+	AccrualAdress string `env:"ACCRUAL_SYSTEM_ADDRESS"`
 }
 
 func parseFlags() *flags {
@@ -19,6 +20,7 @@ func parseFlags() *flags {
 
 	flag.StringVar(&f.RunAddr, "a", f.RunAddr, "address and port to run server")
 	flag.StringVar(&f.Dsn, "d", f.Dsn, "database connection string")
+	flag.StringVar(&f.AccrualAdress, "r", f.AccrualAdress, "accrual service connection string")
 
 	flag.Parse()
 

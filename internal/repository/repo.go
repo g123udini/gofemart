@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	ErrUserAlreadyExists = errors.New("login already exists")
-	ErrNotFoundUser      = errors.New("user not found")
+	ErrUniqConstrait = errors.New("already exists")
+	ErrNotFound      = errors.New("user not found")
 )
 
 type Repo struct {
@@ -36,43 +36,122 @@ func NewRepository(DSN string) (*Repo, error) {
 	return &Repo{DB: db}, nil
 }
 
-func (repo *Repo) GetUserByLogin(login string) (model.User, error) {
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
-
+func (repo *Repo) GetUserByLogin(login string) (*model.User, error) {
 	u := model.User{}
 
-	_, err := service.RetryDB(3, 1*time.Second, 2*time.Second, func() (sql.Result, error) {
-		return nil, repo.DB.QueryRow("SELECT login, password FROM users WHERE login = $1", login).Scan(&u.Login, &u.Password)
-	})
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return model.User{}, ErrNotFoundUser
-	}
+	err := repo.getModel(&u, "SELECT id, login, password FROM users WHERE login = $1", login)
 
 	if err != nil {
-		return u, err
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
 	}
 
-	return u, nil
+	return &u, nil
+}
+
+func (repo *Repo) GetOrderByNumberUser(number string, user *model.User) (*model.Order, error) {
+	var order model.Order
+
+	err := repo.getModel(
+		&order,
+		`SELECT number, status, accural, uploaded_at, user_id
+		 FROM orders
+		 WHERE number = $1 AND user_id = $2`,
+		number,
+		user.ID,
+	)
+
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &order, nil
+}
+
+func (repo *Repo) GetOrdersByUser(user *model.User) ([]model.Order, error) {
+	rows, err := repo.DB.Query(
+		`SELECT number, status, accural, uploaded_at, user_id
+		 FROM orders
+		 WHERE user_id = $1
+		 ORDER BY uploaded_at ASC`,
+		user.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	orders := make([]model.Order, 0)
+
+	for rows.Next() {
+		var order model.Order
+
+		if err := rows.Scan(order.ScanFields()...); err != nil {
+			return nil, err
+		}
+
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return orders, nil
+}
+
+func (repo *Repo) getModel(
+	model model.Model,
+	sqlString string,
+	args ...any,
+) error {
+
+	err := repo.DB.
+		QueryRow(sqlString, args...).
+		Scan(model.ScanFields()...)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	return nil
 }
 
 func (repo *Repo) SaveUser(user model.User) error {
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
+	return repo.SaveDB("INSERT INTO users (login, password) VALUES ($1, $2)", user.Login, user.Password)
+}
 
-	_, err := service.RetryDB(3, 1*time.Second, 2*time.Second, func() (sql.Result, error) {
-		return repo.DB.Exec("INSERT INTO users (login, password) VALUES ($1, $2)", user.Login, user.Password)
-	})
+func (repo *Repo) SaveOrder(order *model.Order) error {
+	return repo.
+		SaveDB(
+			"INSERT INTO orders (number, status, accural, uploaded_at, user_id) VALUES ($1, $2, $3, $4, $5)",
+			order.Number, order.Status, order.Accrual, order.UploadedAt, order.UserID,
+		)
+}
 
-	var pgErr *pgconn.PgError
-	if err != nil && errors.As(err, &pgErr) {
-		if pgErr.Code == "23505" {
-			return ErrUserAlreadyExists
-		}
-	}
+func (repo *Repo) SaveDB(sqlString string, args ...any) error {
+	_, err := service.RetryDB(
+		3,
+		1*time.Second,
+		2*time.Second,
+		func() (sql.Result, error) {
+			return repo.DB.Exec(sqlString, args...)
+		},
+	)
 
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrUniqConstrait
+		}
 		return err
 	}
 

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -9,15 +10,18 @@ import (
 	"github.com/g123udini/gofemart/internal/repository"
 	"github.com/g123udini/gofemart/internal/service"
 	"golang.org/x/crypto/bcrypt"
+	"io"
 	"net/http"
+	"strings"
+	"time"
 )
 
 type Handler struct {
 	repo *repository.Repo
-	ms   *service.MemStorage
+	ms   *service.MemSessionStorage
 }
 
-func NewHandler(repository *repository.Repo, ms *service.MemStorage) *Handler {
+func NewHandler(repository *repository.Repo, ms *service.MemSessionStorage) *Handler {
 	return &Handler{
 		repo: repository,
 		ms:   ms,
@@ -52,7 +56,7 @@ func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	err := handler.repo.SaveUser(u)
 
 	if err != nil {
-		if errors.Is(err, repository.ErrUserAlreadyExists) {
+		if errors.Is(err, repository.ErrUniqConstrait) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
@@ -60,6 +64,8 @@ func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	handler.startSession(&u, w)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
@@ -82,7 +88,7 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	hash, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFoundUser) || u.Password != string(hash) {
+		if errors.Is(err, repository.ErrNotFound) || u.Password != string(hash) {
 			http.Error(w, "Wrong pass or login", http.StatusUnauthorized)
 			return
 		}
@@ -91,6 +97,13 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	handler.startSession(u, w)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func (handler *Handler) startSession(u *model.User, w http.ResponseWriter) {
 	sessionID, err := NewSessionID()
 	handler.ms.AddSession(sessionID, u.Login)
 
@@ -106,8 +119,104 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
 
+func (handler *Handler) GetOrder(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil || cookie.Value == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	login, _ := handler.ms.GetSession(cookie.Value)
+	user, err := handler.repo.GetUserByLogin(login)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "user not found", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	orders, err := handler.repo.GetOrdersByUser(user)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "orders not found", http.StatusNoContent)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	if err = json.NewEncoder(w).Encode(orders); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (handler *Handler) AddOrder(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "cannot read body", http.StatusBadRequest)
+		return
+	}
+	orderNumber := strings.TrimSpace(string(body))
+
+	if !service.ValidLun(orderNumber) {
+		http.Error(w, "order number not valid", http.StatusUnprocessableEntity)
+		return
+	}
+
+	cookie, err := r.Cookie("session_id")
+	if err != nil || cookie.Value == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	login, _ := handler.ms.GetSession(cookie.Value)
+	user, err := handler.repo.GetUserByLogin(login)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "user not found", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	existing, err := handler.repo.GetOrderByNumberUser(orderNumber, user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if existing != nil {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("exists"))
+		return
+	}
+
+	order := &model.Order{
+		Number:     orderNumber,
+		Status:     "NEW",
+		Accrual:    0,
+		UploadedAt: time.Now(),
+		UserID:     user.ID,
+	}
+
+	if err = handler.repo.SaveOrder(order); err != nil {
+		if errors.Is(err, repository.ErrUniqConstrait) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 	w.Write([]byte("ok"))
 }
 
