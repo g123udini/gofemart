@@ -14,7 +14,7 @@ type Order struct {
 	Status     string    `json:"status"`
 	Accrual    int       `json:"accrual"`
 	UploadedAt time.Time `json:"uploaded_at"`
-	UserId     int       `json:"user_id"`
+	UserID     int       `json:"user_id"`
 }
 
 func (o *Order) ScanFields() []any {
@@ -23,7 +23,7 @@ func (o *Order) ScanFields() []any {
 		&o.Status,
 		&o.Accrual,
 		&o.UploadedAt,
-		&o.UserId,
+		&o.UserID,
 	}
 }
 

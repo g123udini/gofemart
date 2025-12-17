@@ -152,7 +152,7 @@ func (handler *Handler) AddOrder(w http.ResponseWriter, r *http.Request) {
 		Status:     "NEW",
 		Accrual:    0,
 		UploadedAt: time.Now(),
-		UserId:     user.Id,
+		UserID:     user.Id,
 	}
 
 	if err = handler.repo.SaveOrder(order); err != nil {

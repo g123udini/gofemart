@@ -143,7 +143,7 @@ func (repo *Repo) SaveOrder(order *model.Order) error {
 	return repo.
 		SaveDB(
 			"INSERT INTO orders (number, status, accural, uploaded_at, user_id) VALUES ($1, $2, $3, $4, $5)",
-			order.Number, order.Status, order.Accrual, order.UploadedAt, order.UserId,
+			order.Number, order.Status, order.Accrual, order.UploadedAt, order.UserID,
 		)
 }
 
