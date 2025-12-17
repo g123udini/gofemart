@@ -37,9 +37,6 @@ func NewRepository(DSN string) (*Repo, error) {
 }
 
 func (repo *Repo) GetUserByLogin(login string) (*model.User, error) {
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
-
 	u := model.User{}
 
 	err := repo.getModel(&u, "SELECT id, login, password FROM users WHERE login = $1", login)
@@ -55,10 +52,6 @@ func (repo *Repo) GetUserByLogin(login string) (*model.User, error) {
 }
 
 func (repo *Repo) GetOrderByNumberUser(number string, user *model.User) (*model.Order, error) {
-
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
-
 	var order model.Order
 
 	err := repo.getModel(
@@ -81,9 +74,6 @@ func (repo *Repo) GetOrderByNumberUser(number string, user *model.User) (*model.
 }
 
 func (repo *Repo) GetOrdersByUser(user *model.User) ([]model.Order, error) {
-	repo.mu.RLock()
-	defer repo.mu.RUnlock()
-
 	rows, err := repo.DB.Query(
 		`SELECT number, status, accural, uploaded_at, user_id
 		 FROM orders
@@ -148,9 +138,6 @@ func (repo *Repo) SaveOrder(order *model.Order) error {
 }
 
 func (repo *Repo) SaveDB(sqlString string, args ...any) error {
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
-
 	_, err := service.RetryDB(
 		3,
 		1*time.Second,
