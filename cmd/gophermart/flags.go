@@ -20,7 +20,7 @@ func parseFlags() *flags {
 
 	flag.StringVar(&f.RunAddr, "a", f.RunAddr, "address and port to run server")
 	flag.StringVar(&f.Dsn, "d", f.Dsn, "database connection string")
-	flag.StringVar(&f.AccrualAdress, "r", f.Dsn, "accrual service connection string")
+	flag.StringVar(&f.AccrualAdress, "r", f.AccrualAdress, "accrual service connection string")
 
 	flag.Parse()
 
