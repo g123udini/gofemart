@@ -7,9 +7,9 @@ import (
 )
 
 type flags struct {
-	RunAddr       string `.env:"RUN_ADDRESS"`
-	Dsn           string `.env:"DATABASE_URI"`
-	AccrualAdress string `.env:"ACCRUAL_SYSTEM_ADDRESS"`
+	RunAddr       string `env:"RUN_ADDRESS"`
+	Dsn           string `env:"DATABASE_URI"`
+	AccrualAdress string `env:"ACCRUAL_SYSTEM_ADDRESS"`
 }
 
 func parseFlags() *flags {
