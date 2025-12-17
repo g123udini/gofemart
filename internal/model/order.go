@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Model interface {
 	ScanFields() []any
@@ -22,4 +25,25 @@ func (o *Order) ScanFields() []any {
 		&o.UploadedAt,
 		&o.UserId,
 	}
+}
+
+func (o Order) MarshalJSON() ([]byte, error) {
+	type orderJSON struct {
+		Number     string `json:"number"`
+		Status     string `json:"status"`
+		Accrual    *int   `json:"accrual,omitempty"`
+		UploadedAt string `json:"uploaded_at"`
+	}
+
+	var accrual *int
+	if o.Status == "PROCEEDED" {
+		accrual = &o.Accrual
+	}
+
+	return json.Marshal(orderJSON{
+		Number:     o.Number,
+		Status:     o.Status,
+		Accrual:    accrual,
+		UploadedAt: o.UploadedAt.Format(time.RFC3339),
+	})
 }

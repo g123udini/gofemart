@@ -25,7 +25,7 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	//initMigrations(repo.DB)
+	initMigrations(repo.DB)
 
 	err = run(repo, ms, f)
 
