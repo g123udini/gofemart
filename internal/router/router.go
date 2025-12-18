@@ -46,7 +46,7 @@ func routeUser(router chi.Router, handler *handler.Handler) {
 			br.
 				With(middleware.AllowContentType("application/json")).
 				With(handler.SessionAuth).
-				Get("/withdraw", handler.Withdraw)
+				Post("/withdraw", handler.Withdraw)
 
 		})
 	})
