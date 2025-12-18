@@ -16,6 +16,11 @@ import (
 	"time"
 )
 
+var (
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrUserNotFound = errors.New("user not found")
+)
+
 type Handler struct {
 	repo *repository.Repo
 	ms   *service.MemSessionStorage
@@ -51,6 +56,10 @@ func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	u := model.User{
 		Login:    input.Login,
 		Password: string(hash),
+		Balance: model.Balance{
+			Current:   0,
+			Withdrawn: 0,
+		},
 	}
 
 	err := handler.repo.SaveUser(u)
@@ -103,24 +112,6 @@ func (handler *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
-func (handler *Handler) startSession(u *model.User, w http.ResponseWriter) {
-	sessionID, err := NewSessionID()
-	handler.ms.AddSession(sessionID, u.Login)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    sessionID,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
 func (handler *Handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_id")
 	if err != nil || cookie.Value == "" {
@@ -158,6 +149,68 @@ func (handler *Handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (handler *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
+	user, err := handler.getUser(r)
+	if errors.Is(err, ErrUnauthorized) {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if errors.Is(err, ErrUserNotFound) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err = json.NewEncoder(w).Encode(user.Balance); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (handler *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Order string `json:"order"`
+		Sum   int    `json:"sum"`
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(&input); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if !service.ValidLun(input.Order) {
+		http.Error(w, "order number not valid", http.StatusUnprocessableEntity)
+		return
+	}
+
+	user, err := handler.getUser(r)
+	if errors.Is(err, ErrUnauthorized) {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if errors.Is(err, ErrUserNotFound) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if user.Balance.Current-input.Sum < 0 {
+		http.Error(w, "Insufficient balance", http.StatusPaymentRequired)
+	}
+
+	withdrawal := model.Withdrawal{
+		Number: input.Order,
+		Sum:    input.Sum,
+		UserID: user.ID,
+	}
+
+	handler.repo.SaveWithdrawal(withdrawal)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+}
+
 func (handler *Handler) AddOrder(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -171,20 +224,13 @@ func (handler *Handler) AddOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cookie, err := r.Cookie("session_id")
-	if err != nil || cookie.Value == "" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	user, err := handler.getUser(r)
+	if errors.Is(err, ErrUnauthorized) {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	login, _ := handler.ms.GetSession(cookie.Value)
-	user, err := handler.repo.GetUserByLogin(login)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "user not found", http.StatusBadRequest)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if errors.Is(err, ErrUserNotFound) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -244,4 +290,44 @@ func (handler *Handler) SessionAuth(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (handler *Handler) startSession(u *model.User, w http.ResponseWriter) {
+	sessionID, err := NewSessionID()
+	handler.ms.AddSession(sessionID, u.Login)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    sessionID,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (h *Handler) getUser(r *http.Request) (*model.User, error) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil || cookie.Value == "" {
+		return nil, ErrUnauthorized
+	}
+
+	login, ok := h.ms.GetSession(cookie.Value)
+	if !ok {
+		return nil, ErrUnauthorized
+	}
+
+	user, err := h.repo.GetUserByLogin(login)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	return user, nil
 }
