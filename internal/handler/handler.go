@@ -199,6 +199,7 @@ func (handler *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 
 	if newBalance < 0 {
 		http.Error(w, "Insufficient balance", http.StatusPaymentRequired)
+		return
 	}
 
 	user.Balance.Current = newBalance
@@ -209,7 +210,11 @@ func (handler *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 		UserID: user.ID,
 	}
 
-	handler.repo.SaveUser(user)
+	err = handler.repo.UpdateUser(user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusPaymentRequired)
+		return
+	}
 	handler.repo.SaveWithdrawal(&withdrawal)
 
 	w.Header().Set("Content-Type", "application/json")

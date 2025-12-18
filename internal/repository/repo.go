@@ -129,6 +129,10 @@ func (repo *Repo) SaveUser(user *model.User) error {
 	return repo.SaveDB("INSERT INTO users (login, password) VALUES ($1, $2)", user.Login, user.Password)
 }
 
+func (repo *Repo) UpdateUser(user *model.User) error {
+	return repo.SaveDB("UPDATE users SET login = $1, password = $2, current = $3, withdrawn = $4 WHERE id = $5", user.Login, user.Password, user.Balance.Current, user.Balance.Withdrawn, user.ID)
+}
+
 func (repo *Repo) SaveWithdrawal(w *model.Withdrawal) error {
 	return repo.SaveDB("INSERT INTO withdrawals (number, sum, user_id) VALUES ($1, $2, $3)", w.Number, w.Sum, w.UserID)
 }
