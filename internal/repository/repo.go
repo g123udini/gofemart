@@ -125,11 +125,11 @@ func (repo *Repo) getModel(
 	return nil
 }
 
-func (repo *Repo) SaveUser(user model.User) error {
+func (repo *Repo) SaveUser(user *model.User) error {
 	return repo.SaveDB("INSERT INTO users (login, password) VALUES ($1, $2)", user.Login, user.Password)
 }
 
-func (repo *Repo) SaveWithdrawal(w model.Withdrawal) error {
+func (repo *Repo) SaveWithdrawal(w *model.Withdrawal) error {
 	return repo.SaveDB("INSERT INTO withdrawals (number, sum, user_id) VALUES ($1, $2, $3)", w.Number, w.Sum, w.UserID)
 }
 

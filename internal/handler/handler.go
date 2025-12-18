@@ -62,7 +62,7 @@ func (handler *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	err := handler.repo.SaveUser(u)
+	err := handler.repo.SaveUser(&u)
 
 	if err != nil {
 		if errors.Is(err, repository.ErrUniqConstrait) {
@@ -195,17 +195,22 @@ func (handler *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.Balance.Current-input.Sum < 0 {
+	newBalance := user.Balance.Current - input.Sum
+
+	if newBalance < 0 {
 		http.Error(w, "Insufficient balance", http.StatusPaymentRequired)
 	}
 
+	user.Balance.Current = newBalance
+	user.Balance.Withdrawn += input.Sum
 	withdrawal := model.Withdrawal{
 		Number: input.Order,
 		Sum:    input.Sum,
 		UserID: user.ID,
 	}
 
-	handler.repo.SaveWithdrawal(withdrawal)
+	handler.repo.SaveUser(user)
+	handler.repo.SaveWithdrawal(&withdrawal)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
