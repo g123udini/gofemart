@@ -320,18 +320,18 @@ func (handler *Handler) startSession(u *model.User, w http.ResponseWriter) {
 	})
 }
 
-func (h *Handler) getUser(r *http.Request) (*model.User, error) {
+func (handler *Handler) getUser(r *http.Request) (*model.User, error) {
 	cookie, err := r.Cookie("session_id")
 	if err != nil || cookie.Value == "" {
 		return nil, ErrUnauthorized
 	}
 
-	login, ok := h.ms.GetSession(cookie.Value)
+	login, ok := handler.ms.GetSession(cookie.Value)
 	if !ok {
 		return nil, ErrUnauthorized
 	}
 
-	user, err := h.repo.GetUserByLogin(login)
+	user, err := handler.repo.GetUserByLogin(login)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
