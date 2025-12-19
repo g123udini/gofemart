@@ -39,7 +39,7 @@ func NewRepository(DSN string) (*Repo, error) {
 func (repo *Repo) GetUserByLogin(login string) (*model.User, error) {
 	u := model.User{}
 
-	err := repo.getModel(&u, "SELECT id, login, password FROM users WHERE login = $1", login)
+	err := repo.getModel(&u, "SELECT id, login, password, current, withdrawn FROM users WHERE login = $1", login)
 
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -125,8 +125,16 @@ func (repo *Repo) getModel(
 	return nil
 }
 
-func (repo *Repo) SaveUser(user model.User) error {
+func (repo *Repo) SaveUser(user *model.User) error {
 	return repo.SaveDB("INSERT INTO users (login, password) VALUES ($1, $2)", user.Login, user.Password)
+}
+
+func (repo *Repo) UpdateUser(user *model.User) error {
+	return repo.SaveDB("UPDATE users SET login = $1, password = $2, current = $3, withdrawn = $4 WHERE id = $5", user.Login, user.Password, user.Balance.Current, user.Balance.Withdrawn, user.ID)
+}
+
+func (repo *Repo) SaveWithdrawal(w *model.Withdrawal) error {
+	return repo.SaveDB("INSERT INTO withdrawals (number, sum, user_id) VALUES ($1, $2, $3)", w.Number, w.Sum, w.UserID)
 }
 
 func (repo *Repo) SaveOrder(order *model.Order) error {
