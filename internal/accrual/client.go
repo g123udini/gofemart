@@ -82,8 +82,7 @@ func (client *Client) doRequest(request *resty.Request, method, url string) (*re
 		}
 	}
 
-	var err error
-	err = service.Retry(time.Second, 5*time.Second, 4, 2, do, func(err error) bool {
+	err := service.Retry(time.Second, 5*time.Second, 4, 2, do, func(err error) bool {
 		return !errors.As(err, &ErrUnexpectedStatus{}) &&
 			!errors.As(err, &ErrTooManyRequests{}) &&
 			!errors.Is(err, context.DeadlineExceeded) &&
