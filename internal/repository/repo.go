@@ -1,8 +1,10 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"github.com/g123udini/gofemart/internal/model"
 	"github.com/g123udini/gofemart/internal/service"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -21,6 +23,111 @@ var (
 type Repo struct {
 	DB *sql.DB
 	mu sync.RWMutex
+}
+
+func (repo *Repo) ListPendingOrders(ctx context.Context, limit int) ([]int64, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	rows, err := repo.DB.QueryContext(
+		ctx,
+		`SELECT number
+		   FROM orders
+		  WHERE status NOT IN ('PROCESSED', 'INVALID')
+		  ORDER BY uploaded_at ASC
+		  LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]int64, 0, limit)
+	for rows.Next() {
+		var n int64
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+func (repo *Repo) MarkOrderInvalidOnce(ctx context.Context, number int64) error {
+	res, err := repo.DB.ExecContext(
+		ctx,
+		`UPDATE orders
+		    SET status = 'INVALID'
+		  WHERE number = $1
+		    AND status NOT IN ('PROCESSED', 'INVALID')`,
+		number,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, _ = res.RowsAffected()
+	return nil
+}
+
+func (repo *Repo) ApplyOrderProcessedOnce(ctx context.Context, number int64, accural int64) error {
+	tx, err := repo.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(
+		ctx,
+		`UPDATE orders
+		    SET status = 'PROCESSED',
+		        accural = $2
+		  WHERE number = $1
+		    AND status NOT IN ('PROCESSED', 'INVALID')`,
+		number, accural,
+	)
+	if err != nil {
+		return err
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return tx.Commit()
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
+		`UPDATE users
+		    SET current = current + $1
+		  WHERE id = (SELECT user_id FROM orders WHERE number = $2)`,
+		accural, number,
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (repo *Repo) UpdateOrderStatusNonFinal(ctx context.Context, number int64, status string) error {
+	if status == "" {
+		return fmt.Errorf("empty status")
+	}
+
+	_, err := repo.DB.ExecContext(
+		ctx,
+		`UPDATE orders
+		    SET status = $2
+		  WHERE number = $1
+		    AND status NOT IN ('PROCESSED', 'INVALID')`,
+		number, status,
+	)
+	return err
 }
 
 func NewRepository(DSN string) (*Repo, error) {
