@@ -22,15 +22,15 @@ func (w *Withdrawal) ScanFields() []any {
 }
 
 func (w Withdrawal) MarshalJSON() ([]byte, error) {
-	type orderJSON struct {
-		Number      string `json:"number"`
-		Sum         int    `json:"sum"`
-		ProcessedAt string `json:"processed_at"`
+	type dto struct {
+		Order       string  `json:"order"`
+		Sum         float32 `json:"sum"`
+		ProcessedAt string  `json:"processed_at"`
 	}
 
-	return json.Marshal(orderJSON{
-		Number:      w.Number,
-		Sum:         w.Sum,
+	return json.Marshal(dto{
+		Order:       w.Number,             // ВАЖНО: из number -> order
+		Sum:         float32(w.Sum) / 100, // копейки -> рубли
 		ProcessedAt: w.ProcessedAt.Format(time.RFC3339),
 	})
 }
