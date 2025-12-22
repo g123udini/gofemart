@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/g123udini/gofemart/internal/accrual"
 	"github.com/g123udini/gofemart/internal/handler"
 	"github.com/g123udini/gofemart/internal/repository"
 	"github.com/g123udini/gofemart/internal/router"
@@ -41,6 +43,14 @@ func run(repo *repository.Repo, ms *service.MemSessionStorage, f *flags) error {
 
 	h := handler.NewHandler(repo, ms)
 	r := router.NewRouter(h)
+
+	accrualClient := accrual.NewClient(f.AccrualAddress, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	worker := accrual.NewAccrualWorker(repo, accrualClient, log.Default())
+	go worker.Run(ctx)
 
 	return http.ListenAndServe(host, r)
 }

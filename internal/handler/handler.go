@@ -11,6 +11,7 @@ import (
 	"github.com/g123udini/gofemart/internal/service"
 	"golang.org/x/crypto/bcrypt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -170,9 +171,10 @@ func (handler *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
 
 func (handler *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Order string `json:"order"`
-		Sum   int    `json:"sum"`
+		Order string  `json:"order"`
+		Sum   float64 `json:"sum"` // рубли с копейками
 	}
+
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 
@@ -180,8 +182,14 @@ func (handler *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+
 	if !service.ValidLun(input.Order) {
 		http.Error(w, "order number not valid", http.StatusUnprocessableEntity)
+		return
+	}
+
+	if input.Sum <= 0 {
+		http.Error(w, "sum must be positive", http.StatusBadRequest)
 		return
 	}
 
@@ -194,28 +202,37 @@ func (handler *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	newBalance := user.Balance.Current - input.Sum
+	sumCents := int(math.Round(input.Sum * 100))
 
+	newBalance := user.Balance.Current - sumCents
 	if newBalance < 0 {
 		http.Error(w, "Insufficient balance", http.StatusPaymentRequired)
 		return
 	}
 
 	user.Balance.Current = newBalance
-	user.Balance.Withdrawn += input.Sum
+	user.Balance.Withdrawn += sumCents
+
 	withdrawal := model.Withdrawal{
 		Number: input.Order,
-		Sum:    input.Sum,
+		Sum:    sumCents, // копейки
 		UserID: user.ID,
 	}
 
-	err = handler.repo.UpdateUser(user)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusPaymentRequired)
+	if err := handler.repo.SaveWithdrawal(&withdrawal); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	handler.repo.SaveWithdrawal(&withdrawal)
+
+	if err := handler.repo.UpdateUser(user); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

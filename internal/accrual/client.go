@@ -1,144 +1,89 @@
 package accrual
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/g123udini/gofemart/internal/service"
-	"io"
 	"net/http"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
-
-	"github.com/go-resty/resty/v2"
 )
 
-var ErrOrderNotFound = errors.New("order not found")
-var ErrInternalServerError = errors.New("internal server error")
+type Status string
 
-type ErrUnexpectedStatus struct {
-	Status int
+const (
+	StatusRegistered Status = "REGISTERED"
+	StatusInvalid    Status = "INVALID"
+	StatusProcessing Status = "PROCESSING"
+	StatusProcessed  Status = "PROCESSED"
+)
+
+type OrderInfo struct {
+	Order   string   `json:"order"`
+	Status  Status   `json:"status"`
+	Accrual *float64 `json:"accrual,omitempty"` // важно: может отсутствовать
+}
+
+var ErrNotRegistered = errors.New("order not registered (204)")
+
+type RateLimitError struct {
+	RetryAfter time.Duration
+}
+
+func (e RateLimitError) Error() string {
+	return fmt.Sprintf("accrual rate limited, retry after %s", e.RetryAfter)
 }
 
 type Client struct {
-	gzipPool *sync.Pool
-	resty    *resty.Client
+	baseURL string
+	http    *http.Client
 }
 
-func New(address string) *Client {
-	client := &Client{
-		resty: resty.
-			New().
-			SetTransport(http.DefaultTransport).
-			SetBaseURL(address).
-			SetHeader("Accept-Encoding", "gzip"),
+func NewClient(baseURL string, httpClient *http.Client) *Client {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 3 * time.Second}
 	}
-
-	return client
+	return &Client{baseURL: baseURL, http: httpClient}
 }
 
-func (client *Client) GetAccrual(ctx context.Context, orderID uint64) (*Accrual, error) {
-	result, err := client.doRequest(client.createRequest(ctx).
-		SetPathParams(map[string]string{
-			"orderID": strconv.FormatUint(orderID, 10),
-		}).
-		SetResult(&Accrual{}),
-		resty.MethodGet, "api/orders/{orderID}")
-
+func (c *Client) GetOrder(ctx context.Context, number string) (OrderInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/orders/"+number, nil)
 	if err != nil {
-		return nil, err
+		return OrderInfo{}, err
 	}
 
-	return result.Result().(*Accrual), nil
-}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return OrderInfo{}, err
+	}
+	defer resp.Body.Close()
 
-func (client *Client) createRequest(ctx context.Context) *resty.Request {
-	return client.resty.R().SetContext(ctx)
-}
-
-func (client *Client) doRequest(request *resty.Request, method, url string) (*resty.Response, error) {
-	var result *resty.Response
-	do := func() error {
-		var err error
-		result, err = request.Execute(method, url)
-		if err != nil {
-			return err
+	switch resp.StatusCode {
+	case http.StatusOK: // 200
+		var oi OrderInfo
+		if err := json.NewDecoder(resp.Body).Decode(&oi); err != nil {
+			return OrderInfo{}, err
 		}
+		return oi, nil
 
-		switch result.StatusCode() {
-		case http.StatusOK:
-			return nil
-		case http.StatusNoContent:
-			return ErrOrderNotFound
-		case http.StatusTooManyRequests:
-			return newErrTooManyRequests(service.Parse(result.Header().Get("Retry-After"), time.Second*10))
-		case http.StatusInternalServerError:
-			return ErrInternalServerError
-		default:
-			return newErrUnexpectedStatus(result.StatusCode())
-		}
-	}
+	case http.StatusNoContent: // 204
+		return OrderInfo{}, ErrNotRegistered
 
-	var err error
-	err = service.Retry(time.Second, 5*time.Second, 4, 2, do, func(err error) bool {
-		return !errors.As(err, &ErrUnexpectedStatus{}) &&
-			!errors.As(err, &ErrTooManyRequests{}) &&
-			!errors.Is(err, context.DeadlineExceeded) &&
-			!errors.Is(err, context.Canceled)
-	})
+	case http.StatusTooManyRequests: // 429
+		return OrderInfo{}, RateLimitError{RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After"))}
 
-	return result, err
-}
-
-func (client *Client) compressRequestBody(resty *resty.Client, request *http.Request) error {
-	if request.Body == nil {
-		return nil
-	}
-
-	buffer := bytes.NewBuffer([]byte{})
-	writer := client.gzipPool.Get().(*gzip.Writer)
-	defer client.gzipPool.Put(writer)
-	writer.Reset(buffer)
-
-	_, err := io.Copy(writer, request.Body)
-	if err = errors.Join(err, writer.Close(), request.Body.Close()); err != nil {
-		return err
-	}
-
-	request.Body = io.NopCloser(buffer)
-	request.GetBody = func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(buffer.Bytes())), nil
-	}
-	request.ContentLength = int64(buffer.Len())
-	request.Header.Set("Content-Encoding", "gzip")
-	request.Header.Set("Content-Length", fmt.Sprintf("%d", buffer.Len()))
-
-	return nil
-}
-
-func (err ErrUnexpectedStatus) Error() string {
-	return fmt.Sprintf("unexpected status code: %d", err.Status)
-}
-
-func newErrUnexpectedStatus(status int) ErrUnexpectedStatus {
-	return ErrUnexpectedStatus{
-		Status: status,
+	default:
+		return OrderInfo{}, fmt.Errorf("accrual unexpected status code=%d", resp.StatusCode)
 	}
 }
 
-type ErrTooManyRequests struct {
-	RetryAfterTime time.Time
-}
-
-func (err ErrTooManyRequests) Error() string {
-	return "too many requests"
-}
-
-func newErrTooManyRequests(retryAfter time.Duration) ErrTooManyRequests {
-	return ErrTooManyRequests{
-		RetryAfterTime: time.Now().Add(retryAfter),
+func parseRetryAfter(v string) time.Duration {
+	sec, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || sec <= 0 {
+		return 60 * time.Second
 	}
+	return time.Duration(sec) * time.Second
 }

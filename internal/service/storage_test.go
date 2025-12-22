@@ -42,9 +42,11 @@ func TestMemSessionStorage_ConcurrentAccess(t *testing.T) {
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(goroutines)
+	errCh := make(chan error, goroutines) // буфер можно и больше
 
 	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+
 		go func(g int) {
 			defer wg.Done()
 
@@ -56,19 +58,28 @@ func TestMemSessionStorage_ConcurrentAccess(t *testing.T) {
 
 				// read after write should see value (в рамках одного goroutine)
 				if v, ok := ms.GetSession(id); !ok || v != login {
-					t.Fatalf("expected ok=true v=%q, got ok=%v v=%q", login, ok, v)
+					errCh <- fmt.Errorf("g=%d i=%d: expected ok=true v=%q, got ok=%v v=%q", g, i, login, ok, v)
+					return
 				}
 
 				ms.DeleteSession(id)
 
 				if v, ok := ms.GetSession(id); ok || v != "" {
-					t.Fatalf("expected deleted, got ok=%v v=%q", ok, v)
+					errCh <- fmt.Errorf("g=%d i=%d: expected deleted, got ok=%v v=%q", g, i, ok, v)
+					return
 				}
 			}
 		}(g)
 	}
 
 	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+	}
 }
 
 func TestMemSessionStorage_ConcurrentSameKey(t *testing.T) {
