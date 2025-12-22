@@ -168,11 +168,11 @@ func (handler *Handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orders, err := handler.repo.GetWithdrawalsByUser(user)
+	withdrawals, err := handler.repo.GetWithdrawalsByUser(user)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "orders not found", http.StatusNoContent)
+			http.Error(w, "withdrawals not found", http.StatusNoContent)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -181,7 +181,7 @@ func (handler *Handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err = json.NewEncoder(w).Encode(orders); err != nil {
+	if err = json.NewEncoder(w).Encode(withdrawals); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

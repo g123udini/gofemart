@@ -38,7 +38,7 @@ func routeUser(router chi.Router, handler *handler.Handler) {
 		r.
 			With(middleware.AllowContentType("application/json")).
 			With(handler.SessionAuth).
-			Get("/withdrawals", handler.GetOrder)
+			Get("/withdrawals", handler.GetWithdrawals)
 
 		r.Route("/balance", func(br chi.Router) {
 			br.

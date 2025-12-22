@@ -29,8 +29,8 @@ func (w Withdrawal) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(dto{
-		Order:       w.Number,             // ВАЖНО: из number -> order
-		Sum:         float32(w.Sum) / 100, // копейки -> рубли
+		Order:       w.Number,
+		Sum:         float32(w.Sum) / 100,
 		ProcessedAt: w.ProcessedAt.Format(time.RFC3339),
 	})
 }

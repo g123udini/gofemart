@@ -214,7 +214,7 @@ func (repo *Repo) GetOrdersByUser(user *model.User) ([]model.Order, error) {
 
 func (repo *Repo) GetWithdrawalsByUser(user *model.User) ([]model.Withdrawal, error) {
 	rows, err := repo.DB.Query(
-		`SELECT user_id, number, sum, proccessed_at
+		`SELECT user_id, number, sum, processed_at
 		 FROM withdrawals
 		 WHERE user_id = $1
 		 ORDER BY processed_at ASC`,
@@ -228,20 +228,14 @@ func (repo *Repo) GetWithdrawalsByUser(user *model.User) ([]model.Withdrawal, er
 	withdrawals := make([]model.Withdrawal, 0)
 
 	for rows.Next() {
-		var withdrawal model.Withdrawal
-
-		if err := rows.Scan(withdrawal.ScanFields()...); err != nil {
+		var w model.Withdrawal
+		if err := rows.Scan(&w.UserID, &w.Number, &w.Sum, &w.ProcessedAt); err != nil {
 			return nil, err
 		}
-
-		withdrawals = append(withdrawals, withdrawal)
+		withdrawals = append(withdrawals, w)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return withdrawals, nil
+	return withdrawals, rows.Err()
 }
 
 func (repo *Repo) getModel(
