@@ -212,6 +212,32 @@ func (repo *Repo) GetOrdersByUser(user *model.User) ([]model.Order, error) {
 	return orders, nil
 }
 
+func (repo *Repo) GetWithdrawalsByUser(user *model.User) ([]model.Withdrawal, error) {
+	rows, err := repo.DB.Query(
+		`SELECT user_id, number, sum, processed_at
+		 FROM withdrawals
+		 WHERE user_id = $1
+		 ORDER BY processed_at ASC`,
+		user.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	withdrawals := make([]model.Withdrawal, 0)
+
+	for rows.Next() {
+		var w model.Withdrawal
+		if err := rows.Scan(&w.UserID, &w.Number, &w.Sum, &w.ProcessedAt); err != nil {
+			return nil, err
+		}
+		withdrawals = append(withdrawals, w)
+	}
+
+	return withdrawals, rows.Err()
+}
+
 func (repo *Repo) getModel(
 	model model.Model,
 	sqlString string,
