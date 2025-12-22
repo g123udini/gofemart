@@ -150,6 +150,43 @@ func (handler *Handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (handler *Handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil || cookie.Value == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	login, _ := handler.ms.GetSession(cookie.Value)
+	user, err := handler.repo.GetUserByLogin(login)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "user not found", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	orders, err := handler.repo.GetWithdrawalsByUser(user)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "orders not found", http.StatusNoContent)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err = json.NewEncoder(w).Encode(orders); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
 func (handler *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	user, err := handler.getUser(r)
 	if errors.Is(err, ErrUnauthorized) {
