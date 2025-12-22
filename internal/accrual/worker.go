@@ -33,12 +33,13 @@ func NewAccrualWorker(repo Repo, client AccrualClient, logger *log.Logger) *Accr
 		logger = log.Default()
 	}
 	return &AccrualWorker{
-		repo:       repo,
-		client:     client,
-		logger:     logger,
-		pollEvery:  300 * time.Millisecond,
+		repo:   repo,
+		client: client,
+		logger: logger,
+
+		pollEvery:  50 * time.Millisecond,
 		batchLimit: 100,
-		reqTimeout: 2 * time.Second,
+		reqTimeout: 300 * time.Millisecond,
 	}
 }
 

@@ -1,5 +1,7 @@
 package model
 
+import "encoding/json"
+
 type User struct {
 	ID       int     `json:"id"`
 	Login    string  `json:"name"`
@@ -20,4 +22,16 @@ func (u *User) ScanFields() []any {
 		&u.Balance.Current,
 		&u.Balance.Withdrawn,
 	}
+}
+
+func (b Balance) MarshalJSON() ([]byte, error) {
+	type balanceDTO struct {
+		Current   float32 `json:"current"`
+		Withdrawn float32 `json:"withdrawn"`
+	}
+
+	return json.Marshal(balanceDTO{
+		Current:   float32(b.Current) / 100,
+		Withdrawn: float32(b.Withdrawn) / 100,
+	})
 }

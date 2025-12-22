@@ -29,21 +29,22 @@ func (o *Order) ScanFields() []any {
 
 func (o Order) MarshalJSON() ([]byte, error) {
 	type orderJSON struct {
-		Number     string `json:"number"`
-		Status     string `json:"status"`
-		Accrual    *int   `json:"accrual,omitempty"`
-		UploadedAt string `json:"uploaded_at"`
+		Number     string   `json:"number"`
+		Status     string   `json:"status"`
+		Accrual    *float32 `json:"accrual,omitempty"`
+		UploadedAt string   `json:"uploaded_at"`
 	}
 
-	var accrual *int
-	if o.Status == "PROCEEDED" {
-		accrual = &o.Accrual
+	var acc *float32
+	if o.Status == "PROCESSED" && o.Accrual > 0 {
+		v := float32(o.Accrual) / 100
+		acc = &v
 	}
 
 	return json.Marshal(orderJSON{
 		Number:     o.Number,
 		Status:     o.Status,
-		Accrual:    accrual,
+		Accrual:    acc,
 		UploadedAt: o.UploadedAt.Format(time.RFC3339),
 	})
 }
